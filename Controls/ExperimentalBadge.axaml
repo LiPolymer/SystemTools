@@ -5,9 +5,18 @@
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="SystemTools.Controls.ExperimentalBadge"
              Margin="0,0,10,0">
-    <Border BorderBrush="{DynamicResource AccentFillColorSelectedTextBackgroundBrush}" BorderThickness="1"
-            Padding="8 0" Height="28" CornerRadius="14"
-            Background="{DynamicResource AccentAcrylicBackgroundFillColorBaseBrush}">
+
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="MyBorderBrush" Color="#FFB900"/>
+        <SolidColorBrush x:Key="MyBackgroundBrush" Color="#b28200"/>
+    </UserControl.Resources>
+
+    <Border BorderBrush="{DynamicResource MyBorderBrush}" 
+            Background="{DynamicResource MyBackgroundBrush}"
+            BorderThickness="1"
+            Padding="8 0" 
+            Height="28" 
+            CornerRadius="14">
         <Label Margin="0 2 0 0">实验性</Label>
     </Border>
 </UserControl>
