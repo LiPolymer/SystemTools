@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Layout;
 using Avalonia.Threading;
 using ClassIsland.Core.Abstractions.Automation;
 using ClassIsland.Core.Attributes;
@@ -159,50 +160,134 @@ public class AdvancedShutdownAction(ILogger<AdvancedShutdownAction> logger) : Ac
     {
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            _activeDialog?.Close();
-
-            var dialog = new AdvancedShutdownDialog();
-            _activeDialog = dialog;
-            dialog.CountdownTextBlock.Text = BuildCountdownText();
-            dialog.CountdownProgressBar.Value = BuildCountdownProgress();
-
-            var countdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            countdownTimer.Tick += (_, _) =>
+            try
             {
-                dialog.CountdownTextBlock.Text = BuildCountdownText();
-                dialog.CountdownProgressBar.Value = BuildCountdownProgress();
-            };
-            countdownTimer.Start();
-
-            dialog.Closed += (_, _) =>
+                await ShowStyledDialogAsync();
+            }
+            catch (Exception ex)
             {
-                countdownTimer.Stop();
-                if (ReferenceEquals(_activeDialog, dialog))
-                {
-                    _activeDialog = null;
-                }
-            };
-
-            dialog.ReadButton.Click += (_, _) => dialog.Close();
-            dialog.CancelPlanButton.Click += (_, _) =>
-            {
-                CancelShutdownPlan();
-                dialog.Close();
-            };
-
-            dialog.ExtendButton.Click += async (_, _) =>
-            {
-                var extendMinutes = await ShowExtendInputDialogAsync(dialog);
-                if (extendMinutes.HasValue)
-                {
-                    ExtendShutdown(extendMinutes.Value);
-                    dialog.Close();
-                }
-            };
-
-            dialog.Show();
-            await Task.CompletedTask;
+                _logger.LogWarning(ex, "高级计时关机样式对话框初始化失败，回退到基础对话框。");
+                await ShowFallbackDialogAsync();
+            }
         });
+    }
+
+    private async Task ShowStyledDialogAsync()
+    {
+        _activeDialog?.Close();
+
+        var dialog = new AdvancedShutdownDialog();
+        _activeDialog = dialog;
+
+        var textBlock = dialog.CountdownTextBlock ?? throw new InvalidOperationException("CountdownTextBlockElement 未找到");
+        var progressBar = dialog.CountdownProgressBar ?? throw new InvalidOperationException("CountdownProgressBarElement 未找到");
+        var readButton = dialog.ReadButton ?? throw new InvalidOperationException("ReadButtonElement 未找到");
+        var cancelPlanButton = dialog.CancelPlanButton ?? throw new InvalidOperationException("CancelPlanButtonElement 未找到");
+        var extendButton = dialog.ExtendButton ?? throw new InvalidOperationException("ExtendButtonElement 未找到");
+
+        textBlock.Text = BuildCountdownText();
+        progressBar.Value = BuildCountdownProgress();
+
+        var countdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        countdownTimer.Tick += (_, _) =>
+        {
+            textBlock.Text = BuildCountdownText();
+            progressBar.Value = BuildCountdownProgress();
+        };
+        countdownTimer.Start();
+
+        dialog.Closed += (_, _) =>
+        {
+            countdownTimer.Stop();
+            if (ReferenceEquals(_activeDialog, dialog))
+            {
+                _activeDialog = null;
+            }
+        };
+
+        readButton.Click += (_, _) => dialog.Close();
+        cancelPlanButton.Click += (_, _) =>
+        {
+            CancelShutdownPlan();
+            dialog.Close();
+        };
+
+        extendButton.Click += async (_, _) =>
+        {
+            var extendMinutes = await ShowExtendInputDialogAsync(dialog);
+            if (extendMinutes.HasValue)
+            {
+                ExtendShutdown(extendMinutes.Value);
+                dialog.Close();
+            }
+        };
+
+        dialog.Show();
+        await Task.CompletedTask;
+    }
+
+    private async Task ShowFallbackDialogAsync()
+    {
+        var dialog = new Window
+        {
+            Title = "高级计时关机",
+            Width = 380,
+            Height = 200,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen
+        };
+
+        var message = new TextBlock
+        {
+            Text = BuildCountdownText(),
+            FontSize = 15,
+            Margin = new(0, 0, 0, 12)
+        };
+
+        var countdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        countdownTimer.Tick += (_, _) => message.Text = BuildCountdownText();
+        countdownTimer.Start();
+        dialog.Closed += (_, _) => countdownTimer.Stop();
+
+        var readButton = new Button { Content = "已阅", Width = 90 };
+        var cancelButton = new Button { Content = "取消计划", Width = 90 };
+        var extendButton = new Button { Content = "延长时间", Width = 90 };
+
+        readButton.Click += (_, _) => dialog.Close();
+        cancelButton.Click += (_, _) =>
+        {
+            CancelShutdownPlan();
+            dialog.Close();
+        };
+        extendButton.Click += async (_, _) =>
+        {
+            var extendMinutes = await ShowExtendInputDialogAsync(dialog);
+            if (extendMinutes.HasValue)
+            {
+                ExtendShutdown(extendMinutes.Value);
+                dialog.Close();
+            }
+        };
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new(16),
+            Spacing = 8,
+            Children =
+            {
+                message,
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 10,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Children = { readButton, cancelButton, extendButton }
+                }
+            }
+        };
+
+        dialog.Show();
+        await Task.CompletedTask;
     }
 
     private static async Task<int?> ShowExtendInputDialogAsync(Window owner)
